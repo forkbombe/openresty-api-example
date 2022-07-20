@@ -35,10 +35,16 @@ Api.responded = false;
 function Api.endpoint(method, path, callback)
     -- If API not already responded
     if Api.responded == false then
+        -- check if path matches request
+        -- any pattern-less placeholders are replaced by %w+ first
+        local pathPattern = "^"..string.gsub(string.gsub(path, "(<[^|]-)>", "%1|%%w+>"), "<%a+|([^>]+)>", "%1").."$"
+        if not string.match(reqPath, pathPattern) then
+            return false
+        end
         -- KeyData = params passed in path
         local keyData = {}
         -- If this endpoint has params
-        if string.find(path, "<(.-)>")
+        if string.find(path, "<.->")
         then
             -- Split origin and passed path sections
             local splitPath = strSplit("/", path)
@@ -46,21 +52,14 @@ function Api.endpoint(method, path, callback)
             -- Iterate over splitPath
             for i, k in pairs(splitPath) do
                 -- If chunk contains <something>
-                if string.find(k, "<(.-)>")
+                if string.find(k, "<.->")
                 then
                     -- Add to keyData
-                    keyData[string.match(k, "%<(%a+)%>")] = splitReqPath[i]
-                    -- Replace matches with default for validation
-                    reqPath = string.gsub(reqPath, splitReqPath[i], k)
+                    keyData[string.match(k, "%<(%a+)%|")] = splitReqPath[i]
                 end
             end
         end
 
-        -- return false if path doesn't match anything
-        if reqPath ~= path
-        then
-            return false;
-        end
         -- return error if method not allowed
         if reqMethod ~= method
         then
@@ -77,7 +76,7 @@ function Api.endpoint(method, path, callback)
 
         -- return body if all OK
         body.keyData = keyData
-        return callback(body);
+        return callback(method, path, body);
     end
 
     return false;
@@ -85,7 +84,7 @@ end
 
 
 Api.endpoint('POST', '/test',
-    function(body)
+    function(method, path, body)
         return ngx.say(
             cjson.encode(
                 {
@@ -98,16 +97,30 @@ Api.endpoint('POST', '/test',
     end
 )
 
-Api.endpoint('GET', '/test/<id>/<name>',
-    function(body)
-        return ngx.say(
-            cjson.encode(
-                {
-                    method=method,
-                    path=path,
-                    body=body,
-                }
-            )
-        );
-    end
+Api.endpoint('GET', '/test/<id|%d+>/<name>',
+        function(method, path, body)
+            return ngx.say(
+                    cjson.encode(
+                            {
+                                method=method,
+                                path=path,
+                                body=body,
+                            }
+                    )
+            );
+        end
+)
+
+Api.endpoint('GET', '/test/<name|%w+>',
+        function(method, path, body)
+            return ngx.say(
+                    cjson.encode(
+                            {
+                                method=method,
+                                path=path,
+                                body=body,
+                            }
+                    )
+            );
+        end
 )
